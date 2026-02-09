@@ -189,16 +189,16 @@ def get_balance(api):
     Fetches the current cash balance (orderable cash).
     """
     try:
+        # Get account object
+        acc = api.account()
         # Using KisStockScope to get account balance info
-        # Using the primary account from api
-        # "국내주식주문 -> 주식잔고조회" (TTTC8434R)
-        # Note: PyKis might have a simpler way but using fetch for direct control
+        # "국내주식주문 -> 주식잔고조회" (VTTC8434R for virtual, TTTC8434R for real)
         response = api.fetch(
             "/uapi/domestic-stock/v1/trading/inquire-psbl-order",
-            api="TTTC8434R",
+            api="VTTC8434R",
             params={
-                "CANO": api.account.cano,
-                "ACNT_PRDT_CD": api.account.prd_code,
+                "CANO": acc.account_number.number,
+                "ACNT_PRDT_CD": acc.account_number.code,
                 "PDNO": "", # Empty for all
                 "ORD_UNPR": "0", # 0 for market price
                 "ORD_DVSN": "01", # 01: Market price
@@ -207,8 +207,8 @@ def get_balance(api):
             },
             domain="virtual"
         )
-        if response and response.output:
-            return float(response.output.nrcv_buy_amt) # nrcv_buy_amt: 미수없는 매수 가능 금액
+        if response and 'output' in response:
+            return float(response['output']['nrcv_buy_amt']) # nrcv_buy_amt: 미수없는 매수 가능 금액
         return 0.0
     except Exception as e:
         logger.error(f"Failed to fetch balance: {e}")
