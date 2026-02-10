@@ -191,33 +191,41 @@ def get_balance(api):
     try:
         # Get account object
         acc = api.account()
-        # Using KisStockScope to get account balance info
-        # "국내주식주문 -> 주식잔고조회" (VTTC8434R for virtual, TTTC8434R for real)
+        # VTTC8435R: 모의투자 매수가능조회 (output 필드 사용)
+        # VTTC8434R: 모의투자 주식잔고조회 (output1, output2 리스트 사용)
+        
+        # 더 정확한 주문 가능 금액 조회를 위해 VTTC8435R 사용
         response = api.fetch(
             "/uapi/domestic-stock/v1/trading/inquire-psbl-order",
-            api="VTTC8434R",
+            api="VTTC8435R",
             params={
                 "CANO": acc.account_number.number,
                 "ACNT_PRDT_CD": acc.account_number.code,
-                "PDNO": "", # Empty for all
-                "ORD_UNPR": "0", # 0 for market price
-                "ORD_DVSN": "01", # 01: Market price
+                "PDNO": "", # 종목번호 (전체 조회 시 공백)
+                "ORD_UNPR": "0", # 주문단가 (0: 시장가)
+                "ORD_DVSN": "01", # 주문구분 (01: 시장가)
                 "CMA_EVLU_AMT_ICLD_YN": "Y",
                 "OVRS_ICLD_YN": "N"
             },
             domain="virtual"
         )
+        
         if response:
-            logger.info(f"Raw API Response Type: {type(response)}")
+            # 1. inquire-psbl-order (VTTC8435R) 응답 처리
             if hasattr(response, "output") and response.output:
-                logger.info(f"API Output Data: {response.output}")
-                # Try to get the balance from multiple possible attributes
-                balance = getattr(response.output, "nrcv_buy_amt", None) or \
-                          getattr(response.output, "ord_psbl_cash", None) or \
-                          getattr(response.output, "dnca_tot_amt", None) or 0.0
+                # nrcv_buy_amt: 미수 없는 매수가능 금액
+                balance = response.output.get("nrcv_buy_amt") or \
+                          response.output.get("ord_psbl_cash") or 0.0
                 return float(balance)
-            else:
-                logger.warning(f"API Response has no 'output' field: {response}")
+            
+            # 2. 만약의 경우를 대비해 inquire-balance (VTTC8434R) 응답 처리 로직 유지
+            if hasattr(response, "output2") and response.output2 and len(response.output2) > 0:
+                # output2는 리스트이므로 첫 번째 항목에서 가져옴
+                balance = response.output2[0].get("dnca_tot_amt") or \
+                          response.output2[0].get("prvs_rcdl_excc_amt") or 0.0
+                return float(balance)
+
+        logger.warning(f"No balance info found in response: {response}")
         return 0.0
     except Exception as e:
         logger.error(f"Failed to fetch balance: {e}")
