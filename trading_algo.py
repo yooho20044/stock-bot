@@ -207,8 +207,17 @@ def get_balance(api):
             },
             domain="virtual"
         )
-        if response and 'output' in response:
-            return float(response['output']['nrcv_buy_amt']) # nrcv_buy_amt: 미수없는 매수 가능 금액
+        if response:
+            logger.info(f"Raw API Response Type: {type(response)}")
+            if hasattr(response, "output") and response.output:
+                logger.info(f"API Output Data: {response.output}")
+                # Try to get the balance from multiple possible attributes
+                balance = getattr(response.output, "nrcv_buy_amt", None) or \
+                          getattr(response.output, "ord_psbl_cash", None) or \
+                          getattr(response.output, "dnca_tot_amt", None) or 0.0
+                return float(balance)
+            else:
+                logger.warning(f"API Response has no 'output' field: {response}")
         return 0.0
     except Exception as e:
         logger.error(f"Failed to fetch balance: {e}")
